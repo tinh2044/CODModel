@@ -8,9 +8,9 @@ data:
   extensions: [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]
 
 model:
-  num_res: 12
+  num_res: 8
   base_channel: 32
-  embed_dim: 256
+  embed_dim: 128
   
 
 training:

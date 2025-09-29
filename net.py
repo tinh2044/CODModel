@@ -628,6 +628,15 @@ class SAFNet(nn.Module):
         self.freq_head = FrequencyEmbeddingHead(base_channel * 4, d=self.embed_dim)
         self.edge_head = EdgeHead(base_channel * 4)
 
+        # projection for high-frequency + context merge (registered to move with model)
+        self.hf_proj = BasicConv(
+            base_channel * 8,  # concat of res3 (C=4B) and ctx_deep (C=4B)
+            base_channel * 4,
+            kernel_size=1,
+            stride=1,
+            relu=True,
+        )
+
         # self.output1 = OutPut(base_channel * 4)
         # self.output2 = OutPut(base_channel * 2)
         # self.output3 = OutPut(base_channel)
@@ -663,10 +672,7 @@ class SAFNet(nn.Module):
         # pass through a small conv to merge with ctx_deep before heads
         hf_merge = torch.cat([hf_agg, ctx_deep], dim=1)
         # adapt back to expected channels (base_channel*4)
-        hf_proj = BasicConv(
-            hf_merge.shape[1], res3.shape[1], kernel_size=1, stride=1, relu=True
-        )
-        hf_feat = hf_proj(hf_merge)
+        hf_feat = self.hf_proj(hf_merge)
         # frequency embedding map and edge logits
         freq_embed = self.freq_head(hf_feat)  # (B, d, Hc, Wc)
         edge_logits = self.edge_head(hf_feat)  # (B,1,Hc,Wc)

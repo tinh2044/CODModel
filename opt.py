@@ -45,7 +45,7 @@ def train_one_epoch(
         for key, value in loss_dict.items():
             metric_logger.update(**{f"loss_{key}": value.item()})
 
-        if eval_train:
+    if eval_train:
             metrics = compute_metrics(pred_masks, targets, threshold=0.5)
 
             for metric_name, metric_value in metrics.items():

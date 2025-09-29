@@ -45,13 +45,12 @@ def train_one_epoch(
         for key, value in loss_dict.items():
             metric_logger.update(**{f"loss_{key}": value.item()})
 
-    if eval_train:
+        if eval_train:
             metrics = compute_metrics(pred_masks, targets, threshold=0.5)
 
             for metric_name, metric_value in metrics.items():
                 metric_logger.update(**{f"{metric_name}": metric_value})
 
-        metric_logger.update(**{"loss_total": total_loss.item()})
         # Save sample images
         if batch_idx % (print_freq * 5) == 0 and hasattr(args, "output_dir"):
             save_sample_images(
@@ -92,12 +91,12 @@ def evaluate_fn(
 
             outputs = model(inputs)
             loss_dict = cod_loss(outputs, targets)
-            total_loss = loss_dict["total"]
+            # total_loss = loss_dict["total"]
             pred_masks = outputs["pred_masks"]
             for key, value in loss_dict.items():
                 metric_logger.update(**{f"loss_{key}": value.item()})
 
-            metric_logger.update(**{"loss_total": total_loss.item()})
+            # metric_logger.update(**{"loss_total": total_loss.item()})
 
             metrics = compute_metrics(pred_masks, targets, threshold=0.5)
 

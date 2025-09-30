@@ -336,12 +336,12 @@ def compute_metrics(pred, gt, *, normalize=True):
     pred_np, gt_np = _to_numpy(pred, gt)
     pred_np, gt_np = _prepare_data_numpy(pred_np, gt_np, normalize)
 
-    em = e_measure(pred_np, gt_np, normalize=normalize)
-    fm = f_measure(pred_np, gt_np, normalize=normalize)
+    em = e_measure(pred_np, gt_np)
+    fm = f_measure(pred_np, gt_np)
     return {
-        "mae": mae(pred_np, gt_np, normalize=normalize),
-        "sm": s_measure(pred_np, gt_np, normalize=normalize),
-        "wfm": weighted_f_measure(pred_np, gt_np, normalize=normalize),
+        "mae": mae(pred_np, gt_np),
+        "sm": s_measure(pred_np, gt_np),
+        "wfm": weighted_f_measure(pred_np, gt_np),
         "adpEm": em["adp"],
         "meanEm": em["curve"].mean(),
         "maxEm": em["curve"].max(),

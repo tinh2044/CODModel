@@ -326,6 +326,33 @@ def weighted_f_measure(pred_np, gt_np, beta=1.0):
     return float(np.mean(vals))
 
 
+def calculate_iou(
+    pred_mask, gt_mask, threshold= 0.5
+):
+    """
+    Calculate Intersection over Union (IoU) for binary segmentation
+    Args:
+        pred_mask: (B, 1, H, W) - probabilities [0,1] for positive class
+        gt_mask: (B, 1, H, W) - binary mask [0,1]
+        threshold: threshold for binary classification
+    Returns:
+        IoU score
+    """
+    if pred_mask.dim() == 4:
+        pred_mask = pred_mask.squeeze(1)  # (B,1,H,W) -> (B,H,W)
+    if gt_mask.dim() == 4:
+        gt_mask = gt_mask.squeeze(1)  # (B,1,H,W) -> (B,H,W)
+
+    # pred_mask is already probabilities [0,1], apply threshold
+    pred_binary = (pred_mask > threshold).float()
+    gt_binary = (gt_mask > threshold).float()
+
+    intersection = (pred_binary * gt_binary).sum()
+    union = pred_binary.sum() + gt_binary.sum() - intersection
+
+    return (intersection / (union + 1e-8)).item()
+
+
 def compute_metrics(pred, gt, *, normalize=True):
     """
     Convenience wrapper to compute five SOD metrics on batch tensors.
@@ -348,4 +375,5 @@ def compute_metrics(pred, gt, *, normalize=True):
         "adpFm": fm["adp"],
         "meanFm": fm["curve"].mean(),
         "maxFm": fm["curve"].max(),
+        "iou": calculate_iou(pred, gt),
     }

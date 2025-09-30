@@ -161,7 +161,7 @@ def main(args, cfg):
             print(f"Finetuning from {args.finetune}")
         checkpoint = torch.load(args.finetune, map_location="cpu")
         target_model = model.module if is_distributed else model
-        ret = target_model.load_state_dict(checkpoint, strict=False)
+        ret = target_model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         if rank == 0:
             print("Missing keys: \n", "\n".join(ret.missing_keys))
             print("Unexpected keys: \n", "\n".join(ret.unexpected_keys))

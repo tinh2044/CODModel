@@ -46,7 +46,7 @@ def train_one_epoch(
             metric_logger.update(**{f"loss_{key}": value.item()})
 
         if eval_train:
-            metrics = compute_metrics(pred_masks, targets, threshold=0.5)
+            metrics = compute_metrics(pred_masks, targets)
 
             for metric_name, metric_value in metrics.items():
                 metric_logger.update(**{f"{metric_name}": metric_value})
@@ -96,9 +96,7 @@ def evaluate_fn(
             for key, value in loss_dict.items():
                 metric_logger.update(**{f"loss_{key}": value.item()})
 
-            # metric_logger.update(**{"loss_total": total_loss.item()})
-
-            metrics = compute_metrics(pred_masks, targets, threshold=0.5)
+            metrics = compute_metrics(pred_masks, targets)
 
             for metric_name, metric_value in metrics.items():
                 metric_logger.update(**{f"{metric_name}": metric_value})

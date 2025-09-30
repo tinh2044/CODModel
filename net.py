@@ -575,9 +575,7 @@ class SAFNet(nn.Module):
                     stride=2,
                     transpose=True,
                 ),
-                BasicConv(
-                    base_channel, 1, kernel_size=3, relu=False, stride=1
-                ),  # final output 1 channel (mask logits)
+                OutPut(base_channel),
             ]
         )
 
@@ -607,8 +605,8 @@ class SAFNet(nn.Module):
         # outputs now 1 channel each (mask logits)
         self.ConvsOut = nn.ModuleList(
             [
-                BasicConv(base_channel * 4, 1, kernel_size=3, relu=False, stride=1),
-                BasicConv(base_channel * 2, 1, kernel_size=3, relu=False, stride=1),
+                OutPut(base_channel * 4),
+                OutPut(base_channel * 2),
             ]
         )
 
@@ -636,10 +634,6 @@ class SAFNet(nn.Module):
             stride=1,
             relu=True,
         )
-
-        # self.output1 = OutPut(base_channel * 4)
-        # self.output2 = OutPut(base_channel * 2)
-        # self.output3 = OutPut(base_channel)
 
     def forward(self, x):
         # multi-inputs
@@ -707,7 +701,7 @@ class SAFNet(nn.Module):
 
 
 if __name__ == "__main__":
-    model = SAFNet(num_res=12, base_channel=32, embed_dim=256)
+    model = SAFNet(num_res=8, base_channel=32, embed_dim=128)
     x = torch.randn(1, 3, 256, 256)
     gt_mask = torch.randn(1, 1, 256, 256)
     y = model(x)

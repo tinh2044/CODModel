@@ -416,63 +416,6 @@ class SpatialChannelModulator(nn.Module):
         return out
 
 
-class sMCSF(nn.Module):
-    """
-    small Multi-scale Contextual Feature module: pyramid pooling + lightweight windowed interaction
-    Returns context feature same spatial size as input.
-    """
-
-    def __init__(self, in_ch, out_ch, pool_sizes=(1, 2, 4)):
-        super().__init__()
-        self.pool_sizes = pool_sizes
-        self.convs = nn.ModuleList(
-            [
-                nn.Sequential(
-                    nn.AdaptiveAvgPool2d((ps, ps)),
-                    nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False),
-                    nn.GELU(),
-                )
-                for ps in pool_sizes
-            ]
-        )
-        # ASPP-lite
-        self.aspp = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    in_ch, out_ch, kernel_size=3, padding=r, dilation=r, bias=False
-                )
-                for r in (1, 6, 12)
-            ]
-        )
-        self.merge = nn.Sequential(
-            nn.Conv2d(
-                out_ch * (len(pool_sizes) + len(self.aspp)),
-                out_ch,
-                kernel_size=1,
-                bias=False,
-            ),
-            nn.BatchNorm2d(out_ch),
-            nn.GELU(),
-        )
-
-    def forward(self, x):
-        bs, c, h, w = x.shape
-        pooled = []
-        for seq in self.convs:
-            p = seq[0](x)  # adaptive pool -> size ps x ps
-            p = seq[1](p)  # conv1x1
-            p = F.interpolate(p, size=(h, w), mode="bilinear", align_corners=False)
-            pooled.append(p)
-        aspp_feats = [
-            F.interpolate(conv(x), size=(h, w), mode="bilinear", align_corners=False)
-            for conv in self.aspp
-        ]
-        feats = pooled + aspp_feats
-        out = torch.cat(feats, dim=1)
-        out = self.merge(out)
-        return out
-
-
 class dynamic_filter(nn.Module):
     def __init__(self, inchannels, kernel_size=3, stride=1, group=8):
         super(dynamic_filter, self).__init__()
@@ -614,53 +557,6 @@ class DBlock(nn.Module):
         return out
 
 
-class SCM(nn.Module):
-    def __init__(self, out_plane):
-        super(SCM, self).__init__()
-        # x (B, C, H, W)
-        self.main = nn.Sequential(
-            BasicConv(
-                3, out_plane // 4, kernel_size=3, stride=1, relu=True
-            ),  # (B, C, H, W) => (B, C/4, H, W)
-            BasicConv(
-                out_plane // 4,
-                out_plane // 2,
-                kernel_size=3,
-                stride=1,
-                relu=True,  # (B, C/4, H, W) => (B, C/2, H, W)
-            ),
-            # BasicConv(
-            #     out_plane // 2, out_plane // 2, kernel_size=3, stride=1, relu=True
-            # ),
-            BasicConv(
-                out_plane // 2, out_plane, kernel_size=1, stride=1, relu=False
-            ),  # (B, C/2, H, W) => (B, C, H, W)
-            nn.InstanceNorm2d(out_plane, affine=True),
-        )
-
-    def forward(self, x):
-        _log(self, f"in: {tuple(x.shape)}")
-        out = self.main(x)
-        _log(self, f"out: {tuple(out.shape)}", add_spacing=True)
-        return out
-
-
-class FAM(nn.Module):
-    def __init__(self, channel):
-        super(FAM, self).__init__()
-        self.merge = BasicConv(
-            channel * 2, channel, kernel_size=1, stride=1, relu=False
-        )
-
-    def forward(self, x1, x2):
-        _log(self, f"in: x1={tuple(x1.shape)}, x2={tuple(x2.shape)}")
-        concat = torch.cat([x1, x2], dim=1)
-        _log(self, f"concat: {tuple(concat.shape)}")
-        out = self.merge(concat)
-        _log(self, f"out: {tuple(out.shape)}", add_spacing=True)
-        return out
-
-
 class OutPut(nn.Module):
     def __init__(self, in_chs):
         super(OutPut, self).__init__()
@@ -744,7 +640,7 @@ class SAFNet(nn.Module):
             ]
         )
 
-        self.Convs = nn.ModuleList(
+        self.up = nn.ModuleList(
             [
                 BasicConv(
                     base_channel * 4,
@@ -767,26 +663,6 @@ class SAFNet(nn.Module):
             ]
         )
 
-        # original SCM + FAM for multi-input merging (kept)
-        self.FAM1 = FAM(base_channel * 4)
-        self.SCM1 = SCM(base_channel * 4)
-        self.FAM2 = FAM(base_channel * 2)
-        self.SCM2 = SCM(base_channel * 2)
-
-        # new modules:
-        # small multi-scale context module
-        self.sMCSF1 = sMCSF(base_channel * 4, base_channel * 4)
-        self.sMCSF2 = sMCSF(base_channel * 2, base_channel * 2)
-
-        # projection for high-frequency + context merge (registered to move with model)
-        self.hf_proj = BasicConv(
-            base_channel * 8,  # concat of res3 (C=4B) and ctx_deep (C=4B)
-            base_channel * 4,
-            kernel_size=1,
-            stride=1,
-            relu=True,
-        )
-
         # Attach debug to all modules if enabled
         if self.debug_enabled and self._debug is not None and debug_attach_all:
             self._attach_debug_to_all()
@@ -797,22 +673,6 @@ class SAFNet(nn.Module):
             self._debug.set_base_shape(tuple(x.shape))
             self._debug.write(
                 f"input: {tuple(x.shape)} (min={x.min().item():.4f}, max={x.max().item():.4f})"
-            )
-
-        # multi-inputs
-        x_2 = F.interpolate(x, scale_factor=0.5, mode="bilinear", align_corners=False)
-        x_4 = F.interpolate(x_2, scale_factor=0.5, mode="bilinear", align_corners=False)
-        if self.debug_enabled:
-            self._debug.write(
-                f"multi_inputs: x_2={tuple(x_2.shape)}, x_4={tuple(x_4.shape)}"
-            )
-
-        # image-level SCM (legacy) for multi-input fusion
-        z2 = self.SCM2(x_2)
-        z4 = self.SCM1(x_4)
-        if self.debug_enabled:
-            self._debug.write(
-                f"SCM outputs: z2={tuple(z2.shape)}, z4={tuple(z4.shape)}"
             )
 
         masks = []
@@ -826,54 +686,34 @@ class SAFNet(nn.Module):
         z = self.feat_extract[1](res1)  # downsample by 2
         if self.debug_enabled:
             self._debug.write(f"feat_extract[1]: {tuple(z.shape)}")
-        z = self.FAM2(z, z2)
-        if self.debug_enabled:
-            self._debug.write(f"FAM2: {tuple(z.shape)}")
+        # z = self.FAM2(z, z2)
         res2 = self.Encoder[1](z)  # mid res
         if self.debug_enabled:
             self._debug.write(f"Encoder[1]: {tuple(res2.shape)}")
         z = self.feat_extract[2](res2)  # downsample by 2
         if self.debug_enabled:
             self._debug.write(f"feat_extract[2]: {tuple(z.shape)}")
-        z = self.FAM1(z, z4)
+        # z = self.FAM1(z, z4)
         if self.debug_enabled:
             self._debug.write(f"FAM1: {tuple(z.shape)}")
         res3 = self.Encoder[2](z)  # deepest (coarse)
         if self.debug_enabled:
             self._debug.write(f"Encoder[2]: {tuple(res3.shape)}")
 
-        # apply sMCSF context on deepest and mid features (helps SCM decisions)
-        ctx_deep = self.sMCSF1(res3)
-        ctx_mid = self.sMCSF2(res2)
-        if self.debug_enabled:
-            self._debug.write(
-                f"sMCSF: ctx_deep={tuple(ctx_deep.shape)}, ctx_mid={tuple(ctx_mid.shape)}"
-            )
-
-        # For FEH/EdgeHead we compute a simple high-frequency approximation:
-        # high_freq = feature - local_avg(feature)
-        # use deepest feature res3 aggregated with ctx_deep
-        hf_agg = res3 - F.avg_pool2d(res3, kernel_size=3, padding=1, stride=1)
-        # pass through a small conv to merge with ctx_deep before heads
-        hf_merge = torch.cat([hf_agg, ctx_deep], dim=1)
-        # adapt back to expected channels (base_channel*4)
-        hf_feat = self.hf_proj(hf_merge)
-        # Decode
-        z = self.Decoder[0](hf_feat)  # decode deepest
+        z = self.Decoder[0](res3)  # decode deepest
         z_ = self.ConvsOut[0](z)  # logits at mid resolution (1 channel)
         z_up = self.feat_extract[3](z)  # upsample
         # note: we add skip from x_4 (image-level) as in original SFNet
         masks.append(z_)
 
-        z = torch.cat([z_up, ctx_mid], dim=1)
-        z = self.Convs[0](z)
+        # z = torch.cat([z_up, ctx_mid], dim=1)
+        z = torch.cat([z_up, res2], dim=1)
+        z = self.up[0](z)
         z = self.Decoder[1](z)
-        z_2 = self.ConvsOut[1](z)
         z_up2 = self.feat_extract[4](z)
-        masks.append(z_2)
 
         z = torch.cat([z_up2, res1], dim=1)
-        z = self.Convs[1](z)
+        z = self.up[1](z)
         z = self.Decoder[2](z)
         z = self.feat_extract[5](z)
         masks.append(z)  # final logits full res

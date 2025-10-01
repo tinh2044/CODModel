@@ -9,7 +9,7 @@ data:
 
 model:
   num_res: 8
-  base_channel: 32
+  base_channel: 64
   embed_dim: 128
   
 

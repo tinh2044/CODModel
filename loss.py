@@ -304,11 +304,11 @@ def cod_loss(outputs, gt_mask, cfg=None):
     mask_loss = sum(mask_losses)
 
     # boundary loss
-    edge_logits = outputs["edge"]  # (B,1,He,We)
-    He, We = edge_logits.shape[2], edge_logits.shape[3]
-    gt_edge = make_boundary_target(gt_mask, dilation_radius=1)
-    gt_edge_small = F.interpolate(gt_edge, size=(He, We), mode="nearest")
-    boundary_loss = bce_loss_fn(edge_logits, gt_edge_small)
+    # edge_logits = outputs["edge"]  # (B,1,He,We)
+    # He, We = edge_logits.shape[2], edge_logits.shape[3]
+    # gt_edge = make_boundary_target(gt_mask, dilation_radius=1)
+    # gt_edge_small = F.interpolate(gt_edge, size=(He, We), mode="nearest")
+    # boundary_loss = bce_loss_fn(edge_logits, gt_edge_small)
 
     # # frequency contrastive loss
     # freq_embed = outputs["freq_embed"]  # (B,d,He,We) assumed normalized already by FEH
@@ -334,11 +334,11 @@ def cod_loss(outputs, gt_mask, cfg=None):
     # )
 
     # total loss
-    total_loss = mask_loss + lambda_b * boundary_loss + lambda_f  # * freq_loss
+    total_loss = mask_loss + lambda_b + lambda_f  # * freq_loss
 
     loss_dict = {
         "mask": mask_loss,
-        "boundary": boundary_loss,
+        # "boundary": boundary_loss,
         "total": total_loss,
         # "freq_loss": freq_loss.detach(),
     }

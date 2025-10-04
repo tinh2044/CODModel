@@ -5,6 +5,8 @@ from torch.optim.lr_scheduler import (
     StepLR,
     ReduceLROnPlateau,
     LambdaLR,
+    LinearLR,
+    SequentialLR,
 )
 
 
@@ -77,6 +79,34 @@ def build_scheduler(scheduler_config, optimizer, last_epoch=-1):
             return lr_l
 
         scheduler = LambdaLR(optimizer, lr_lambda=lambda_rule, last_epoch=last_epoch)
+    elif scheduler_name == "cosinewithwarmup":
+        # Cosine annealing with warmup
+        warmup_epochs = scheduler_config.get("warmup_epochs", 5)
+        T_max = scheduler_config["T_max"]
+
+        # Warmup scheduler
+        warmup_scheduler = LinearLR(
+            optimizer,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=warmup_epochs,
+            last_epoch=last_epoch,
+        )
+
+        # Cosine annealing scheduler
+        cosine_scheduler = CosineAnnealingLR(
+            optimizer,
+            T_max=T_max - warmup_epochs,
+            eta_min=scheduler_config.get("eta_min", 0),
+            last_epoch=last_epoch,
+        )
+
+        # Sequential scheduler
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
+        )
     else:
         raise ValueError(f"Unsupported scheduler: {scheduler_name}")
 

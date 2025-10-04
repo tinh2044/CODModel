@@ -278,9 +278,9 @@ def cod_loss(outputs, gt_mask, cfg=None):
     alpha_scales = cfg.get(
         "alpha_scales", [0.3, 0.3, 1.0]
     )  # weights for coarse->fine masks
-    gamma_dice = cfg.get("gamma_dice", 1.0)
-    lambda_b = cfg.get("lambda_b", 1.0)
-    lambda_f = cfg.get("lambda_f", 0.2)
+    gamma_dice = cfg.get("gamma_dice", 2.0)  # Tăng dice weight
+    lambda_b = cfg.get("lambda_b", 0.5)  # Giảm boundary weight
+    lambda_f = cfg.get("lambda_f", 0.1)  # Giảm frequency weight
     # n_anchors = cfg.get("n_anchors", 64)
     # patch_size = cfg.get("patch_size", 7)
     # n_negatives = cfg.get("n_negatives", 128)
@@ -304,42 +304,50 @@ def cod_loss(outputs, gt_mask, cfg=None):
     mask_loss = sum(mask_losses)
 
     # boundary loss
-    # edge_logits = outputs["edge"]  # (B,1,He,We)
-    # He, We = edge_logits.shape[2], edge_logits.shape[3]
-    # gt_edge = make_boundary_target(gt_mask, dilation_radius=1)
-    # gt_edge_small = F.interpolate(gt_edge, size=(He, We), mode="nearest")
-    # boundary_loss = bce_loss_fn(edge_logits, gt_edge_small)
+    edge_logits = outputs.get("edge", None)  # (B,1,He,We)
+    if edge_logits is not None:
+        He, We = edge_logits.shape[2], edge_logits.shape[3]
+        gt_edge = make_boundary_target(gt_mask, dilation_radius=1)
+        gt_edge_small = F.interpolate(gt_edge, size=(He, We), mode="nearest")
+        boundary_loss = bce_loss_fn(edge_logits, gt_edge_small)
+    else:
+        boundary_loss = torch.tensor(0.0, device=gt_mask.device)
 
-    # # frequency contrastive loss
-    # freq_embed = outputs["freq_embed"]  # (B,d,He,We) assumed normalized already by FEH
-    # # pred_mask for hard negatives: use final fine mask probability if exists
-    # final_logits = masks[-1]
-    # # upsample final logits to embedding size
-    # pred_for_hn = F.interpolate(
-    #     final_logits,
-    #     size=(freq_embed.shape[2], freq_embed.shape[3]),
-    #     mode="bilinear",
-    #     align_corners=False,
-    # )
-    # freq_loss = frequency_contrastive_loss(
-    #     freq_embed,
-    #     gt_mask,
-    #     pred_mask_logits=pred_for_hn,
-    #     n_anchors_per_image=n_anchors,
-    #     patch_size=patch_size,
-    #     n_negatives=n_negatives,
-    #     hard_negative_ratio=hard_neg_ratio,
-    #     temperature=temperature,
-    #     device=device,
-    # )
+    # frequency contrastive loss
+    freq_embed = outputs.get(
+        "freq_embed", None
+    )  # (B,d,He,We) assumed normalized already by FEH
+    if freq_embed is not None:
+        # pred_mask for hard negatives: use final fine mask probability if exists
+        final_logits = masks[-1]
+        # upsample final logits to embedding size
+        pred_for_hn = F.interpolate(
+            final_logits,
+            size=(freq_embed.shape[2], freq_embed.shape[3]),
+            mode="bilinear",
+            align_corners=False,
+        )
+        freq_loss = frequency_contrastive_loss(
+            freq_embed,
+            gt_mask,
+            pred_mask_logits=pred_for_hn,
+            n_anchors_per_image=cfg.get("n_anchors", 64),
+            patch_size=cfg.get("patch_size", 7),
+            n_negatives=cfg.get("n_negatives", 128),
+            hard_negative_ratio=cfg.get("hard_neg_ratio", 0.5),
+            temperature=cfg.get("temperature", 0.07),
+            device=gt_mask.device,
+        )
+    else:
+        freq_loss = torch.tensor(0.0, device=gt_mask.device)
 
     # total loss
-    total_loss = mask_loss + lambda_b + lambda_f  # * freq_loss
+    total_loss = mask_loss + lambda_b * boundary_loss + lambda_f * freq_loss
 
     loss_dict = {
         "mask": mask_loss,
-        # "boundary": boundary_loss,
+        "boundary": boundary_loss,
         "total": total_loss,
-        # "freq_loss": freq_loss.detach(),
+        "freq_loss": freq_loss.detach(),
     }
     return loss_dict

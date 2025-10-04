@@ -4,7 +4,7 @@ data:
   test_dir: "test"
   raw_dir: "Imgs"
   mask_dir: "GT"
-  image_size: 384
+  image_size: 256
   extensions: [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]
 
 model:
@@ -19,11 +19,12 @@ training:
 
   optimizer:
     name: "AdamW"
-    lr: 0.0003
+    lr: 0.001
     weight_decay: 0.0001
     betas: [0.9, 0.999]
 
   scheduler:
-    name: "CosineAnnealingLR"
+    name: "cosinewithwarmup"
     T_max: 100
-    eta_min: 0.00001
+    eta_min: 0.0001
+    warmup_epochs: 10

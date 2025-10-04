@@ -279,8 +279,8 @@ def cod_loss(outputs, gt_mask, cfg=None):
         "alpha_scales", [0.3, 0.3, 1.0]
     )  # weights for coarse->fine masks
     gamma_dice = cfg.get("gamma_dice", 2.0)  # Tăng dice weight
-    lambda_b = cfg.get("lambda_b", 0.5)  # Giảm boundary weight
-    lambda_f = cfg.get("lambda_f", 0.1)  # Giảm frequency weight
+    lambda_b = 0.0  # Disable boundary loss
+    lambda_f = 0.0  # Disable frequency loss
     # n_anchors = cfg.get("n_anchors", 64)
     # patch_size = cfg.get("patch_size", 7)
     # n_negatives = cfg.get("n_negatives", 128)
@@ -341,8 +341,8 @@ def cod_loss(outputs, gt_mask, cfg=None):
     else:
         freq_loss = torch.tensor(0.0, device=gt_mask.device)
 
-    # total loss
-    total_loss = mask_loss + lambda_b * boundary_loss + lambda_f * freq_loss
+    # total loss (only mask loss since boundary and frequency losses are disabled)
+    total_loss = mask_loss
 
     loss_dict = {
         "mask": mask_loss,

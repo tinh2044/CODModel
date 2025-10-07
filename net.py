@@ -128,7 +128,7 @@ class BasicConv(nn.Module):
         if norm:
             layers.append(nn.BatchNorm2d(out_channel))
         if relu:
-            layers.append(nn.GELU())
+            layers.append(nn.ReLU())
         self.main = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -253,39 +253,6 @@ class SpatialChannelModulator(nn.Module):
 
         out = self.out(fea_high + fea_low)
         return out
-
-
-class FrequencyEmbeddingHead(nn.Module):
-    """
-    Produces embedding map from high-frequency maps for contrastive supervision.
-    Returns normalized embedding map (B, d, H, W)
-    """
-
-    def __init__(self, in_ch, d=128):
-        super().__init__()
-        self.proj = nn.Sequential(
-            nn.Conv2d(in_ch, max(in_ch // 2, d // 2), kernel_size=1, bias=False),
-            nn.BatchNorm2d(max(in_ch // 2, d // 2)),
-            nn.GELU(),
-            nn.Conv2d(
-                max(in_ch // 2, d // 2),
-                max(in_ch // 2, d // 2),
-                kernel_size=3,
-                padding=1,
-                bias=False,
-            ),
-            nn.BatchNorm2d(max(in_ch // 2, d // 2)),
-            nn.GELU(),
-            nn.Conv2d(max(in_ch // 2, d // 2), d, kernel_size=1, bias=True),
-        )
-
-    def forward(self, x):
-        # x: (B, C, H, W) high-frequency aggregated
-        z = self.proj(x)  # (B, d, H, W)
-        # L2 normalize along channel dim
-        norm = torch.norm(z, p=2, dim=1, keepdim=True).clamp(min=1e-6)
-        z = z / norm
-        return z
 
 
 class sMCSF(nn.Module):
@@ -460,35 +427,35 @@ class DBlock(nn.Module):
         return self.layers(x)
 
 
-class SCM(nn.Module):
-    def __init__(self, out_plane):
-        super(SCM, self).__init__()
-        self.main = nn.Sequential(
-            BasicConv(3, out_plane // 4, kernel_size=3, stride=1, relu=True),
-            BasicConv(
-                out_plane // 4, out_plane // 2, kernel_size=1, stride=1, relu=True
-            ),
-            BasicConv(
-                out_plane // 2, out_plane // 2, kernel_size=3, stride=1, relu=True
-            ),
-            BasicConv(out_plane // 2, out_plane, kernel_size=1, stride=1, relu=False),
-            nn.InstanceNorm2d(out_plane, affine=True),
-        )
+# class SCM(nn.Module):
+#     def __init__(self, out_plane):
+#         super(SCM, self).__init__()
+#         self.main = nn.Sequential(
+#             BasicConv(3, out_plane // 4, kernel_size=3, stride=1, relu=True),
+#             BasicConv(
+#                 out_plane // 4, out_plane // 2, kernel_size=1, stride=1, relu=True
+#             ),
+#             BasicConv(
+#                 out_plane // 2, out_plane // 2, kernel_size=3, stride=1, relu=True
+#             ),
+#             BasicConv(out_plane // 2, out_plane, kernel_size=1, stride=1, relu=False),
+#             nn.InstanceNorm2d(out_plane, affine=True),
+#         )
 
-    def forward(self, x):
-        x = self.main(x)
-        return x
+#     def forward(self, x):
+#         x = self.main(x)
+#         return x
 
 
-class FAM(nn.Module):
-    def __init__(self, channel):
-        super(FAM, self).__init__()
-        self.merge = BasicConv(
-            channel * 2, channel, kernel_size=3, stride=1, relu=False
-        )
+# class FAM(nn.Module):
+#     def __init__(self, channel):
+#         super(FAM, self).__init__()
+#         self.merge = BasicConv(
+#             channel * 2, channel, kernel_size=3, stride=1, relu=False
+#         )
 
-    def forward(self, x1, x2):
-        return self.merge(torch.cat([x1, x2], dim=1))
+#     def forward(self, x1, x2):
+#         return self.merge(torch.cat([x1, x2], dim=1))
 
 
 class OutPut(nn.Module):
@@ -590,10 +557,10 @@ class SAFNet(nn.Module):
         )
 
         # original SCM + FAM for multi-input merging (kept)
-        self.FAM1 = FAM(base_channel * 4)
-        self.SCM1 = SCM(base_channel * 4)
-        self.FAM2 = FAM(base_channel * 2)
-        self.SCM2 = SCM(base_channel * 2)
+        # self.FAM1 = FAM(base_channel * 4)
+        # self.SCM1 = SCM(base_channel * 4)
+        # self.FAM2 = FAM(base_channel * 2)
+        # self.SCM2 = SCM(base_channel * 2)
 
         # new modules:
         # small multi-scale context module
@@ -615,18 +582,18 @@ class SAFNet(nn.Module):
         x_4 = F.interpolate(x_2, scale_factor=0.5, mode="bilinear", align_corners=False)
 
         # image-level SCM (legacy) for multi-input fusion
-        z2 = self.SCM2(x_2)
-        z4 = self.SCM1(x_4)
+        # z2 = self.SCM2(x_2)
+        # z4 = self.SCM1(x_4)
 
         masks = []
         # Encode
         x_ = self.feat_extract[0](x)  # full res conv -> base_channel
         res1 = self.Encoder[0](x_)  # output at full res (C)
         z = self.feat_extract[1](res1)  # downsample by 2
-        z = self.FAM2(z, z2)
+        # z = self.FAM2(z, z2)
         res2 = self.Encoder[1](z)  # mid res
         z = self.feat_extract[2](res2)  # downsample by 2
-        z = self.FAM1(z, z4)
+        # z = self.FAM1(z, z4)
         res3 = self.Encoder[2](z)  # deepest (coarse)
 
         # apply sMCSF context on deepest and mid features (helps SCM decisions)

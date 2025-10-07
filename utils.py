@@ -119,13 +119,13 @@ def save_eval_images(inputs, pred_masks, targets, filenames, output_dir):
     axes[0].axis("off")
 
     # Ground truth mask
-    target_np = target_mask.squeeze().numpy()
+    target_np = target_mask.detach().squeeze().numpy()
     axes[1].imshow(target_np, cmap="gray")
     axes[1].set_title("Ground Truth")
     axes[1].axis("off")
 
     # Predicted mask
-    pred_np = pred_mask.squeeze().numpy()
+    pred_np = pred_mask.detach().squeeze().numpy()
     axes[2].imshow(pred_np, cmap="gray")
     axes[2].set_title("Prediction")
     axes[2].axis("off")

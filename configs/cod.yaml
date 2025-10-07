@@ -1,6 +1,6 @@
 data:
   root: "./dataset/"
-  train_dir: "train"
+  train_dir: "test"
   test_dir: "test"
   raw_dir: "Imgs"
   mask_dir: "GT"
